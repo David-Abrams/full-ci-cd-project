@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>David-Abrams-portfolio</title>
+    
+    <link rel="stylesheet" type="text/css"  href="{{ url_for('static',filename='css/style.css')}}" >
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins">
+
+    <style>
+        body  {
+            background-color:white;
+            background-image: url("{{ url_for('static',filename='img/bg.png')}}");
+            height: 1080px;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            position: relative;
+        }
+        </style>
+
+</head>
+<body>
+    <div class="logo_header">
+		<a href="{{ url_for('index') }}"><img src="{{ url_for('static',filename='img/logo.png')}}" alt="logo" class="center" /></a>
+	  </div>
+
+    <ul>
+        <li><a href="{{ url_for('index') }}">guest list</a></li>
+        <li><a href="{{ url_for('create') }}">add</a></li>
+        <li><a href="{{ url_for('static', filename='html/about.html')}}">About</a></li>
+    </ul>
+    <div class="content">
+        {% block content %} {% endblock %}
+    </div>
+</body>
+</html>

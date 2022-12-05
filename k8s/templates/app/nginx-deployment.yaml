@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: 381353240263.dkr.ecr.us-east-1.amazonaws.com/nginx-app:1.0.96 #{{ .Values.image_nginx }}
+
+          ports:
+            - containerPort: 80
+          volumeMounts:
+          - name: app-rp-config-cm-vol
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            readOnly: false
+      volumes:
+      - name: app-rp-config-cm-vol
+        configMap:
+          name: friday-app
+        
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: nginx
+  name: nginx
+spec:
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app.kubernetes.io/component: nginx
+  type: LoadBalancer

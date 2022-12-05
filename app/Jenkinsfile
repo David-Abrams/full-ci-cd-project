@@ -1,0 +1,144 @@
+pipeline {
+    agent any    
+    options {
+        timestamps()
+        timeout(time:15, unit:'MINUTES')
+    }
+    environment {
+        APP_IMAGE="app"
+        NGINX_IMAGE="nginx-app"
+        DEFAULT_TAG="99-SNAPSHOT" 
+        AWS_ACCOUNT_ID="381353240263"
+        AWS_REGION="us-east-1"
+        ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        HELM_REPO="git@github.com:davidab265/k8s.git"
+
+    }
+
+    stages {
+
+        // build the image. for now with no tag.
+        stage('[1] Build  docker-images (app & nginx') {
+            steps {
+                // Clean before build
+                cleanWs()
+                // We need to explicitly checkout from SCM here
+                checkout scm
+                sh "docker-compose down" //
+                sh "docker system prune -f" // cleanup in case of failure that avoids the cleanup at the end of the pipeline.
+                sh "docker build -t ${APP_IMAGE}:${DEFAULT_TAG} -f Dockerfile-app ." // app
+                sh "docker build -t ${NGINX_IMAGE}:${DEFAULT_TAG} -f Dockerfile-nginx ." // nginx
+
+
+            }
+        }
+
+        // EE test: test the friday-app image (with mongodb)'    
+        stage('[2] E2E test') {
+            steps {
+                sh "docker-compose up --detach"
+                sh "sleep 1m"
+                sh "./e2e-test.sh"
+                sh "docker-compose down"
+            }
+        }
+
+        // update the correct release version. will be used to tag the image and the corrent git commit
+        stage('[3] Update Tag') {
+            when { branch 'master' }
+            steps {
+                script{
+                    sshagent(credentials: ['friday-1']) {
+                        //sh "git fetch --all --tags" // not shure that this is needed, pulling the code pulles the tags as well
+                        CURRENT_TAG = sh(script: "git tag | sort -V | tail -1", returnStdout: true)
+                        if (CURRENT_TAG.isEmpty() ) {
+                            NEW_TAG =  "1.0.0"
+                        } 
+                        else {
+                            (major, minor, patch) = CURRENT_TAG.tokenize(".")
+                            patch = patch.toInteger() + 1
+                            NEW_TAG = "${major}.${minor}.${patch}"
+
+                        }
+                        // add the new tag to corrent commit
+                        sh "git tag ${NEW_TAG}"
+                        sh "git push --tags"
+
+                    }
+                }
+            }
+        }
+                
+
+        stage('[4] TAG & PUSH images to ECR') {
+           when { branch 'master' }
+           steps {
+               script {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                       
+                       sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}" //login
+                       sh "docker tag ${APP_IMAGE}:${DEFAULT_TAG} ${ECR_REPO}/${APP_IMAGE}:${NEW_TAG}" // app
+                       sh "docker tag ${NGINX_IMAGE}:${DEFAULT_TAG} ${ECR_REPO}/${NGINX_IMAGE}:${NEW_TAG}" // nginx
+                       sh "docker push ${ECR_REPO}/${APP_IMAGE}:${NEW_TAG}" // app
+                       sh "docker push ${ECR_REPO}/${NGINX_IMAGE}:${NEW_TAG}" // nginx
+
+
+                   }
+               }
+           }
+        }  
+        stage('[5] Update App Image In helm') {
+            when { branch 'master' }
+            steps {
+                script {
+                   sshagent(credentials: ['friday-1']) {
+                       sh "ls -la"
+                       sh "./update-helm.sh ${NEW_TAG}" // you can read the script down here:
+
+                       // this is the full script: //
+                       // sh '''
+                       //         #!/bin/bash
+                       //         git config --global user.email "9200200@gmail.com"
+                       //         git config --global user.name "David Abrams"
+                       //         rm -fr .git
+                       //         mkdir abc && cd abc
+                       //         git clone ${HELM_REPO}
+                       //         cd k8s
+                       //         ls -la
+                       //         sed -E -i.back "s,image_app: .*,image-app: ${ECR_REPO}/${APP_IMAGE}:${NEW_TAG1},g" values.yaml 
+                       //         sed -E -i.back "s,image_nginx: .*,image-nginx: ${ECR_REPO}/${APP_IMAGE}:${NEW_TAG1}",g" values.yaml 
+                       //         git add values.yaml
+                       //         git commit --allow-empty -m "v.${NEw_TAG1}: Updated the image in the values.yaml file. (the ${APP_IMAGE} image was updated to the latest version)"
+                       //         git push
+                       // '''  
+                    }
+                }
+            }
+        }
+         
+
+    }
+    post {
+        // cleaning up the system
+        always{
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true,
+                    patterns: [[pattern: '.gitignore', type: 'INCLUDE'],
+                               [pattern: '.propsfile', type: 'EXCLUDE']])
+
+            //shut down containers and delete images
+            sh "docker system prune -f -a"
+
+        }
+        success { 
+            emailext body: " jenkins job [${JOB_NAME}](jobname/branch) hes succeeded! the new build is taged: ${NEW_TAG} . the results of the build can be found heer: ${BUILD_URL} ", recipientProviders: [buildUser()], subject: " jenkins ${JOB_NAME} success. new build tag: ${NEW_TAG} ", to: '9200200@gmail.com'  
+        }  
+        failure {  
+            emailext body: " jenkins [${JOB_NAME}](jobname/branch) failure. no new build was executed. the current build is: " , recipientProviders: [buildUser()], subject:  " jenkins ${JOB_NAME} failed :( ", to: '9200200@gmail.com';  
+        }  
+    }
+}
+
+

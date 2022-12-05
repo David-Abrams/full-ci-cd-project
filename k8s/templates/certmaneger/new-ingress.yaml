@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/whitelist-source-range: 0.0.0.0/0,::/0
+  creationTimestamp: "2022-11-29T10:57:24Z"
+  generateName: cm-acme-http-solver-
+  generation: 1
+  labels:
+    acme.cert-manager.io/http-domain: "505349273"
+    acme.cert-manager.io/http-token: "1225854719"
+    acme.cert-manager.io/http01-solver: "true"
+  name: cm-acme-http-solver-s4jdz
+  namespace: default
+  ownerReferences:
+  - apiVersion: acme.cert-manager.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Challenge
+    name: example-cert-68p2q-537284898-1341999479
+    uid: 2651dbd5-3d5f-48e7-b16b-ae0969882cea
+  resourceVersion: "34619"
+  uid: bcaa8439-551b-4ca5-b775-458d148320cf
+spec:
+  rules:
+  - host: 4321.hopto.org
+    http:
+      paths:
+      - backend:
+          service:
+            name: cm-acme-http-solver-gfrm2
+            port:
+              number: 8089
+        path: /.well-known/acme-challenge/tBnE-5oOdiUla2Dpze0Np1vVgzbzqZjkbV64THu8sVE
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - hostname: a2ad6dfc48b824e30ae5e945867f1a00-1961548301.us-east-1.elb.amazonaws.com

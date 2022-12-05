@@ -1,0 +1,18 @@
+FROM python:3.10-alpine3.15
+
+WORKDIR /home/app
+
+# istall python packages
+COPY requirements.txt requirements.txt
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+
+#ENV FLASK_APP=app
+#ENV FLASK_ENV=development
+
+COPY app.py .
+COPY ./templates ./templates/
+COPY ./static ./static/
+ENTRYPOINT [ "python3", "-m", "flask", "run", "--host=0.0.0.0" ]
+
+
